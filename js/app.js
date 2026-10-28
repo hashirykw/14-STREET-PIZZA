@@ -36,6 +36,23 @@
     var h = parseInt(o.hour, 10) % 24, m = parseInt(o.minute, 10);
     return { day: o.weekday, h: h, m: m, mins: h * 60 + m };
   }
+  var lenis = null;
+  function scrollToY(y) {
+    if (lenis) lenis.scrollTo(y, { duration: 1.1 });
+    else window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+  }
+  var finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  function swipe(el, onNext, onPrev) {
+    if (!el) return;
+    var x0 = 0, y0 = 0, on = false;
+    el.addEventListener('pointerdown', function (e) { if (e.button) return; on = true; x0 = e.clientX; y0 = e.clientY; });
+    el.addEventListener('pointerup', function (e) {
+      if (!on) return; on = false;
+      var dx = e.clientX - x0, dy = e.clientY - y0;
+      if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy) * 1.3) { if (dx < 0) onNext(); else onPrev(); }
+    });
+    el.addEventListener('pointercancel', function () { on = false; });
+  }
   function allItems() {
     var out = [];
     MENU.forEach(function (s) { s.items.forEach(function (it) { out.push({ it: it, sec: s }); }); });
@@ -45,43 +62,98 @@
     return '<span class="price">' + (it.f ? '<small>from </small>' : '') + money(it.p) + '</span>' + (it.w ? '<span class="was">' + money(it.w) + '</span>' : '');
   }
 
-  /* ---------- intro ---------- */
+  /* ---------- preloader: the box opens ---------- */
   function intro() {
-    var el = $('.intro');
+    var el = $('[data-loader]');
     if (!el) return Promise.resolve();
-    var seen = false;
-    try { seen = sessionStorage.getItem('14st-intro') === '1'; sessionStorage.setItem('14st-intro', '1'); } catch (e) {}
-    if (!hasGsap || reduce || seen) { el.classList.add('is-done'); return Promise.resolve(); }
+    if (!hasGsap || reduce) { el.classList.add('is-done'); return Promise.resolve(); }
+    if (lenis) lenis.stop();
+    document.body.style.overflow = 'hidden';
+    var pctEl = $('[data-pct]', el), bar = $('[data-bar]', el), msg = $('[data-loader-msg]', el);
+    var lid = $('[data-lid]', el), box = $('[data-box]', el), pizza = $('.box__pizza', el);
+    var prog = { v: 0 }, loaded = document.readyState === 'complete';
+    window.addEventListener('load', function () { loaded = true; });
+    function paint() {
+      var v = Math.round(prog.v);
+      pctEl.textContent = v; bar.style.width = v + '%';
+      msg.textContent = v < 45 ? 'Firing up the oven' : v < 90 ? 'Slicing it up' : 'Hot & ready';
+    }
     return new Promise(function (res) {
-      var tl = gsap.timeline({ onComplete: function () { el.classList.add('is-done'); res(); } });
-      tl.from('.moon', { scaleY: 0, duration: .45, ease: 'back.out(2)', stagger: .09 })
-        .to('.intro__moons', { y: -18, duration: .25, ease: 'power2.out' }, '+=.12')
-        .to(el, { yPercent: -100, duration: .7, ease: 'expo.inOut' }, '-=.05');
+      var done = false;
+      function finish() {
+        if (done) return; done = true;
+        gsap.timeline({ onComplete: function () {
+          el.classList.add('is-done'); document.body.style.overflow = ''; if (lenis) lenis.start(); res();
+        } })
+          .to(prog, { v: 100, duration: .35, ease: 'power1.out', onUpdate: paint })
+          .to(pizza, { scale: 1.12, duration: .3, ease: 'power2.out' }, '<')
+          .to('.loader__stage', { scale: 1.25, opacity: 0, duration: .55, ease: 'power3.in' }, '+=.12')
+          .to('.loader__half--top', { yPercent: -101, duration: .8, ease: 'expo.inOut' }, '-=.22')
+          .to('.loader__half--bottom', { yPercent: 101, duration: .8, ease: 'expo.inOut' }, '<');
+      }
+      gsap.set(lid, { z: 30, transformOrigin: '50% 0%' });
+      var tl = gsap.timeline();
+      tl.from(box, { y: -120, opacity: 0, rotationZ: -40, duration: .75, ease: 'back.out(1.6)' })
+        .from('.loader__line, .loader__bar', { y: 16, opacity: 0, duration: .5, ease: 'expo.out', stagger: .06 }, '-=.4')
+        .to(lid, { rotationX: -122, duration: .95, ease: 'power3.inOut' }, '+=.05')
+        .fromTo(pizza, { rotation: -60, scale: .9 }, { rotation: 40, scale: 1, duration: 1.4, ease: 'power2.out' }, '<')
+        .fromTo('.steam', { opacity: 0, y: 0 }, { opacity: .8, y: -40, duration: .9, ease: 'sine.out', stagger: .18 }, '-=.9')
+        .to('.steam', { opacity: 0, duration: .5 }, '-=.2');
+      gsap.to(prog, { v: 82, duration: 1.7, ease: 'power1.out', onUpdate: paint });
+      var minT = setTimeout(function check() {
+        if (loaded) finish(); else setTimeout(check, 120);
+      }, 1900);
+      setTimeout(finish, 4500); // never hold the page hostage
+      el.addEventListener('click', function () { clearTimeout(minT); finish(); });
     });
   }
 
   /* ---------- nav ---------- */
   function nav() {
-    var n = $('[data-nav]'), last = 0;
+    var n = $('[data-nav]'), last = 0, burger = $('.nav__burger');
     window.addEventListener('scroll', function () {
       var y = window.scrollY;
       n.classList.toggle('is-scrolled', y > 10);
       var drawerOpen = !$('#drawer').hidden;
+      if (drawerOpen && Math.abs(y - last) > 30) burger.click();
       n.classList.toggle('is-hidden', !drawerOpen && y > 500 && y > last + 4);
       if (y < last - 4) n.classList.remove('is-hidden');
+      root.classList.toggle('nav-hidden', n.classList.contains('is-hidden'));
       last = y;
     }, { passive: true });
 
-    var burger = $('.nav__burger'), drawer = $('#drawer');
+    var drawer = $('#drawer'), scrim = $('[data-drawer-scrim]');
+    function place() { drawer.style.top = Math.round(n.getBoundingClientRect().bottom + 10) + 'px'; }
     function setDrawer(open) {
       burger.setAttribute('aria-expanded', open ? 'true' : 'false');
       burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-      drawer.hidden = !open;
-      document.body.style.overflow = open ? 'hidden' : '';
-      if (open && hasGsap && !reduce) gsap.from('#drawer nav a', { yPercent: 60, opacity: 0, duration: .5, ease: 'expo.out', stagger: .04 });
+      if (open) {
+        place(); drawer.hidden = false; scrim.hidden = false;
+        if (hasGsap && !reduce) {
+          gsap.fromTo(drawer, { opacity: 0, scale: .9, y: -8 }, { opacity: 1, scale: 1, y: 0, duration: .38, ease: 'back.out(1.7)' });
+          gsap.fromTo(scrim, { opacity: 0 }, { opacity: 1, duration: .25 });
+          gsap.fromTo('#drawer nav a', { x: 14, opacity: 0 }, { x: 0, opacity: 1, duration: .35, ease: 'expo.out', stagger: .03, delay: .05 });
+        }
+        var first = $('#drawer nav a'); if (first) first.focus({ preventScroll: true });
+      } else if (!drawer.hidden) {
+        if (hasGsap && !reduce) {
+          gsap.to(drawer, { opacity: 0, scale: .94, y: -6, duration: .2, ease: 'power2.in', onComplete: function () { drawer.hidden = true; } });
+          gsap.to(scrim, { opacity: 0, duration: .2, onComplete: function () { scrim.hidden = true; } });
+        } else { drawer.hidden = true; scrim.hidden = true; }
+      }
     }
     burger.addEventListener('click', function () { setDrawer(drawer.hidden); });
+    scrim.addEventListener('click', function () { setDrawer(false); });
+    window.addEventListener('resize', function () { if (!drawer.hidden) place(); });
     $$('#drawer a').forEach(function (a) { a.addEventListener('click', function () { setDrawer(false); }); });
+    // in-page links: smooth, offset for the header
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href^="#"]'); if (!a) return;
+      var id = a.getAttribute('href'); if (id.length < 2) return;
+      var t = document.querySelector(id); if (!t) return;
+      e.preventDefault();
+      scrollToY(t.getBoundingClientRect().top + window.scrollY - (id === '#top' ? 200 : 64));
+    });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !drawer.hidden) { setDrawer(false); burger.focus(); } });
 
     // active link
@@ -108,7 +180,7 @@
     var stage = $('.hero__stage');
     var floats = $$('.float');
     var mx = 0, my = 0;
-    stage.parentElement.addEventListener('pointermove', function (e) {
+    if (finePointer) stage.parentElement.addEventListener('pointermove', function (e) {
       var r = stage.getBoundingClientRect();
       mx = (e.clientX - (r.left + r.width / 2)) / r.width;
       my = (e.clientY - (r.top + r.height / 2)) / r.height;
@@ -122,6 +194,8 @@
       gsap.to(f, { rotation: i % 2 ? 8 : -8, yPercent: i % 2 ? 6 : -6, duration: 3 + i * .6, ease: 'sine.inOut', yoyo: true, repeat: -1 });
     });
     gsap.to('.hero__plate', { scale: .86, yPercent: 10, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    gsap.to('.hero__cloth', { rotationX: 38, rotation: 30, transformPerspective: 1000, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    gsap.to('.hero__stage', { rotationX: 18, transformPerspective: 1200, transformOrigin: '50% 100%', ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
     gsap.to('.float--1, .float--3', { yPercent: -60, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
     gsap.to('.float--2, .float--4', { yPercent: -120, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
   }
@@ -145,7 +219,7 @@
     list.innerHTML = items.map(function (x, i) {
       return '<li class="best__item"><button class="best__row" type="button" data-open="' + esc(x.sec.name) + '|' + esc(x.it.s) + '">' +
         '<span class="best__rank">' + String(i + 1).padStart(2, '0') + '</span>' +
-        '<img class="best__img" src="' + esc(x.it.img) + '" alt="" loading="lazy" width="92" height="92">' +
+        '<img class="best__img" src="' + esc(x.it.img.replace('assets/img/', 'assets/thumb/')) + '" alt="" loading="lazy" decoding="async" width="92" height="92">' +
         '<span class="best__name">' + esc(x.it.n) + '<span class="best__sec">' + esc(x.sec.name) + '<span class="best__p"> · ' + priceBlock(x.it) + '</span></span></span>' +
         '<span class="best__count"><span class="best__num" data-count="' + x.it.c + '">' + num(x.it.c) + '</span><span class="best__unit">orders</span></span>' +
         '<span class="best__bar" style="width:' + (x.it.c / max * 100).toFixed(1) + '%" aria-hidden="true"></span>' +
@@ -191,16 +265,20 @@
           .to(top, { rotation: '+=200', scale: 1, opacity: 1, duration: .7, ease: 'expo.out' });
       } else { top.src = it.img; }
     }
-    function select(i, focus) {
+    var select = function (i, focus) {
       $$('.xtab', tabs).forEach(function (b, j) { b.setAttribute('aria-selected', j === i); b.tabIndex = j === i ? 0 : -1; if (j === i && focus) b.focus(); });
       render(i, true);
-    }
+    };
     tabs.addEventListener('click', function (e) { var b = e.target.closest('.xtab'); if (b) select($$('.xtab', tabs).indexOf(b)); });
     tabs.addEventListener('keydown', function (e) {
       var bs = $$('.xtab', tabs), i = bs.indexOf(document.activeElement);
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); select((i + (e.key === 'ArrowRight' ? 1 : -1) + bs.length) % bs.length, true); }
     });
     render(startIdx, false);
+    var xcur = startIdx;
+    var _sel = select;
+    select = function (i, focus) { xcur = i; _sel(i, focus); };
+    swipe($('.xtreme__stage'), function () { select((xcur + 1) % sec.items.length); }, function () { select((xcur - 1 + sec.items.length) % sec.items.length); });
 
     if (!hasGsap || reduce) { $$('.stack__label').forEach(function (l) { l.style.opacity = 1; }); return; }
     var mm = gsap.matchMedia();
@@ -230,8 +308,8 @@
         '<span class="flav__n">' + String(i + 1).padStart(2, '0') + '</span><span class="flav__name">' + esc(it.n) + '</span>' +
         '<span class="flav__price">from ' + money(it.p) + '</span></button></li>';
     }).join('');
-    // preload
-    sec.items.forEach(function (it) { var im = new Image(); im.src = it.img; });
+    function preload(i) { [i - 1, i + 1].forEach(function (k) { var it = sec.items[(k + sec.items.length) % sec.items.length]; var im = new Image(); im.decoding = 'async'; im.src = it.img; }); }
+    preload(0);
 
     function sizes(it) {
       var out = [];
@@ -260,6 +338,7 @@
       var btn = $$('.flav', list)[i];
       if (window.matchMedia('(max-width: 960px)').matches) btn.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
       renderInfo(i);
+      preload(i);
       if (!hasGsap || reduce) { img.src = sec.items[i].img; return; }
       busy = true;
       gsap.from(info.children, { y: 14, opacity: 0, duration: .45, ease: 'expo.out', stagger: .04 });
@@ -268,6 +347,10 @@
         .fromTo(img, { xPercent: 70 * dir, rotation: 100 * dir, opacity: 0 }, { xPercent: 0, rotation: 0, opacity: 1, duration: .75, ease: 'expo.out' });
     }
     list.addEventListener('click', function (e) { var b = e.target.closest('.flav'); if (b) select(+b.dataset.i); });
+    var nflav = sec.items.length;
+    function step(d) { select((cur + d + nflav) % nflav); }
+    $$('[data-flav-step]').forEach(function (b) { b.addEventListener('click', function () { step(+b.dataset.flavStep); }); });
+    swipe($('.flavours__board'), function () { step(1); }, function () { step(-1); });
     list.addEventListener('keydown', function (e) {
       var k = e.key, n = sec.items.length;
       if (['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].indexOf(k) < 0) return;
@@ -435,7 +518,8 @@
       var html = '';
       gs.forEach(function (g) { g.secs.forEach(function (sn) { var s = section(sn); s.items.forEach(function (it) { html += ticket(it, s, g); }); }); });
       board.innerHTML = html;
-      if (animate && hasGsap && !reduce) gsap.from(board.children, { y: 30, opacity: 0, rotation: function (i) { return i % 2 ? 2 : -2; }, duration: .6, ease: 'expo.out', stagger: .05 });
+      board.scrollLeft = 0;
+      if (animate && hasGsap && !reduce) gsap.from(board.children, { x: 40, opacity: 0, duration: .55, ease: 'expo.out', stagger: .05, clearProps: 'transform' });
     }
     function select(btn, focus) {
       $$('.dtab', tabs).forEach(function (b) { var on = b === btn; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
@@ -448,59 +532,101 @@
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); select(bs[(i + (e.key === 'ArrowRight' ? 1 : -1) + bs.length) % bs.length], true); }
     });
     show('now', false);
-    if (hasGsap && !reduce) gsap.from('.ticket', { y: 50, opacity: 0, duration: .8, ease: 'expo.out', stagger: .06, scrollTrigger: { trigger: board, start: 'top 80%' } });
+    if (hasGsap && !reduce) gsap.from('.ticket', { x: 60, opacity: 0, duration: .8, ease: 'expo.out', stagger: .06, clearProps: 'transform', scrollTrigger: { trigger: board, start: 'top 85%' } });
   }
 
   /* ---------- full menu ---------- */
   function menu() {
     var cats = $('[data-menu-cats]'), body = $('[data-menu-body]'), search = $('[data-menu-search]');
+    var LIMIT = 6;
+    function nice(n) { return n.replace('EARLY MIDNIGHT', 'Early Midnight'); }
     function when(s) {
       if (s.hours && !/12:00 AM\s*–\s*11:59 PM/.test(s.hours)) return s.hours.replace(/:00/g, '').replace('–', 'to');
       if (s.days && s.days.length === 1) return { Tue: 'Tuesdays only', Sun: 'Sundays only' }[s.days[0]] || s.days[0];
       return '';
     }
-    cats.innerHTML = MENU.map(function (s) {
-      return '<a class="mcat" href="#m-' + s.id + '" data-cat="' + s.id + '">' + esc(s.name.replace('EARLY MIDNIGHT', 'Early Midnight')) + '<small>' + s.items.length + '</small></a>';
+    var start = 0;
+    MENU.forEach(function (s, i) { if (s.name === 'Pizza Flavors') start = i; });
+    cats.setAttribute('role', 'tablist');
+    cats.innerHTML = MENU.map(function (s, i) {
+      return '<button class="mcat" type="button" role="tab" id="mc-' + s.id + '" aria-controls="m-' + s.id + '" aria-selected="' + (i === start) + '" tabindex="' + (i === start ? 0 : -1) + '" data-i="' + i + '">' + esc(nice(s.name)) + '<small>' + s.items.length + '</small></button>';
     }).join('');
-    body.innerHTML = MENU.map(function (s) {
-      return '<section class="msec" id="m-' + s.id + '" data-sec="' + s.id + '" aria-labelledby="mt-' + s.id + '"><div class="msec__head"><h3 class="msec__title" id="mt-' + s.id + '">' + esc(s.name.replace('EARLY MIDNIGHT', 'Early Midnight')) + '</h3><span class="msec__when">' + esc(when(s)) + '</span></div>' +
-        '<div class="msec__list">' + s.items.map(function (it) {
-          return '<button class="mitem" type="button" data-open="' + esc(s.name) + '|' + esc(it.s) + '" data-q="' + esc((it.n + ' ' + it.d + ' ' + s.name).toLowerCase()) + '">' +
-            '<img class="mitem__img" src="' + esc(it.img) + '" alt="" loading="lazy" width="76" height="76">' +
-            '<span><span class="mitem__top"><span class="mitem__name">' + esc(it.n) + '</span><span class="mitem__dots" aria-hidden="true"></span><span class="mitem__price">' + (it.f ? '<small>from </small>' : '') + money(it.p) + '</span></span>' +
+    body.innerHTML = MENU.map(function (s, i) {
+      var long = s.items.length > LIMIT;
+      var next = MENU[(i + 1) % MENU.length];
+      return '<section class="msec' + (long ? ' is-long' : '') + '" id="m-' + s.id + '" role="tabpanel" aria-labelledby="mc-' + s.id + '" data-i="' + i + '"' + (i === start ? '' : ' hidden') + '>' +
+        '<div class="msec__head"><h3 class="msec__title">' + esc(nice(s.name)) + '</h3><span class="msec__when">' + esc(when(s) || s.items.length + (s.items.length > 1 ? ' items' : ' item')) + '</span></div>' +
+        '<div class="msec__list">' + s.items.map(function (it, k) {
+          return '<button class="mitem' + (k >= LIMIT ? ' is-extra' : '') + '" type="button" data-open="' + esc(s.name) + '|' + esc(it.s) + '" data-q="' + esc((it.n + ' ' + it.d + ' ' + s.name).toLowerCase()) + '">' +
+            '<span class="mitem__pic"><img class="mitem__img" src="' + esc(it.img.replace('assets/img/', 'assets/thumb/')) + '" alt="" loading="lazy" decoding="async" width="76" height="76"></span>' +
+            '<span class="mitem__txt"><span class="mitem__top"><span class="mitem__name">' + esc(it.n) + '</span><span class="mitem__dots" aria-hidden="true"></span><span class="mitem__price">' + (it.f ? '<small>from </small>' : '') + money(it.p) + '</span></span>' +
             (it.d ? '<span class="mitem__desc">' + esc(it.d) + '</span>' : '') +
             (it.w ? '<span class="mitem__meta">was <s>' + money(it.w) + '</s></span>' : '') + '</span></button>';
-        }).join('') + '</div></section>';
+        }).join('') + '</div>' +
+        '<div class="msec__foot">' + (long ? '<button class="msec__more" type="button" data-more aria-expanded="false">Show all ' + s.items.length + '</button>' : '<span></span>') +
+        '<button class="msec__next" type="button" data-next="' + ((i + 1) % MENU.length) + '">Next: ' + esc(nice(next.name)) + ' <span aria-hidden="true">→</span></button></div>' +
+        '</section>';
     }).join('') + '<p class="menu__empty" data-menu-empty hidden></p>';
 
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        var id = e.target.dataset.sec;
-        $$('.mcat', cats).forEach(function (a) {
-          var on = a.dataset.cat === id; a.classList.toggle('is-active', on);
-          if (on && window.matchMedia('(max-width: 960px)').matches) cats.scrollTo({ left: a.offsetLeft - 16, behavior: 'smooth' });
-        });
-      });
-    }, { rootMargin: '-30% 0px -60% 0px' });
-    $$('.msec', body).forEach(function (s) { io.observe(s); });
+    var cur = start, searching = false;
+    function select(i, opts) {
+      opts = opts || {};
+      cur = i;
+      $$('.mcat', cats).forEach(function (b, j) { var on = j === i; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+      var btn = $$('.mcat', cats)[i];
+      if (btn) {
+        if (cats.scrollWidth > cats.clientWidth) cats.scrollTo({ left: btn.offsetLeft - cats.clientWidth / 2 + btn.offsetWidth / 2, behavior: reduce ? 'auto' : 'smooth' });
+        else if (cats.scrollHeight > cats.clientHeight) cats.scrollTo({ top: btn.offsetTop - cats.clientHeight / 2, behavior: reduce ? 'auto' : 'smooth' });
+        if (opts.focus) btn.focus({ preventScroll: true });
+      }
+      if (searching) return;
+      $$('.msec', body).forEach(function (sec, j) { sec.hidden = j !== i; });
+      var sec = $$('.msec', body)[i];
+      if (opts.scroll) {
+        var top = $('.menu__layout').getBoundingClientRect().top;
+        if (top < 0) scrollToY(window.scrollY + top - 70);
+      }
+      if (hasGsap && !reduce && sec) gsap.fromTo($$('.msec__head, .mitem:not([hidden])', sec).slice(0, 10), { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: .5, ease: 'expo.out', stagger: .03, clearProps: 'transform,opacity' });
+    }
+    cats.addEventListener('click', function (e) { var b = e.target.closest('.mcat'); if (b) { if (search.value) { search.value = ''; runSearch(); } select(+b.dataset.i, { scroll: true }); } });
+    cats.addEventListener('keydown', function (e) {
+      var n = MENU.length, k = e.key;
+      if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].indexOf(k) < 0) return;
+      e.preventDefault();
+      select((cur + (k === 'ArrowRight' || k === 'ArrowDown' ? 1 : -1) + n) % n, { focus: true });
+    });
+    body.addEventListener('click', function (e) {
+      var more = e.target.closest('[data-more]');
+      if (more) {
+        var sec = more.closest('.msec'), open = !sec.classList.contains('is-open');
+        sec.classList.toggle('is-open', open);
+        more.setAttribute('aria-expanded', open);
+        more.textContent = open ? 'Show fewer' : 'Show all ' + $$('.mitem', sec).length;
+        if (open && hasGsap && !reduce) gsap.from($$('.is-extra', sec), { y: 14, opacity: 0, duration: .45, ease: 'expo.out', stagger: .025, clearProps: 'transform,opacity' });
+        if (!open) { var t = sec.getBoundingClientRect().top; if (t < 0) scrollToY(window.scrollY + t - 80); }
+        return;
+      }
+      var nx = e.target.closest('[data-next]');
+      if (nx) select(+nx.dataset.next, { scroll: true });
+    });
 
     var t;
-    search.addEventListener('input', function () {
-      clearTimeout(t);
-      t = setTimeout(function () {
-        var q = search.value.trim().toLowerCase(), any = false;
-        $$('.msec', body).forEach(function (sec) {
-          var n = 0;
-          $$('.mitem', sec).forEach(function (m) { var hit = !q || m.dataset.q.indexOf(q) > -1; m.hidden = !hit; if (hit) n++; });
-          sec.hidden = n === 0; if (n) any = true;
-          var a = $('.mcat[data-cat="' + sec.dataset.sec + '"]', cats); if (a) a.hidden = n === 0;
-        });
-        var empty = $('[data-menu-empty]');
-        empty.hidden = any;
-        if (!any) empty.textContent = 'Nothing on the menu matches “' + search.value.trim() + '”. Try “wings”, “fries” or “Nutella”.';
-      }, 90);
-    });
+    function runSearch() {
+      var q = search.value.trim().toLowerCase(), any = false;
+      searching = !!q;
+      body.classList.toggle('is-searching', searching);
+      cats.classList.toggle('is-dim', searching);
+      $$('.msec', body).forEach(function (sec, j) {
+        var n = 0;
+        $$('.mitem', sec).forEach(function (m) { var hit = !q || m.dataset.q.indexOf(q) > -1; m.hidden = !hit; if (hit) n++; });
+        sec.hidden = searching ? n === 0 : j !== cur;
+        if (searching && n) any = true;
+      });
+      var empty = $('[data-menu-empty]');
+      empty.hidden = !searching || any;
+      if (searching && !any) empty.textContent = 'Nothing on the menu matches “' + search.value.trim() + '”. Try “wings”, “fries” or “Nutella”.';
+    }
+    search.addEventListener('input', function () { clearTimeout(t); t = setTimeout(runSearch, 90); });
   }
 
   /* ---------- product sheet ---------- */
@@ -540,20 +666,21 @@
       var p = key.split('|'), f = find(p[0], p[1]); if (!f) return;
       var it = f.it;
       lastFocus = document.activeElement;
-      img.src = it.img; img.alt = it.n;
+      img.src = it.img; img.alt = it.n; img.decoding = 'async';
       body.innerHTML = '<p class="sh__sec">' + esc(f.sec.name.replace('EARLY MIDNIGHT', 'Early Midnight')) + '</p><h3 class="sh__name" id="sheet-title">' + esc(it.n) + '</h3>' +
         (it.d ? '<p class="sh__desc">' + esc(it.d) + '</p>' : '') +
         '<p class="sh__price"><span class="big-price">' + (it.f ? '<small>from </small>' : '') + money(it.p) + '</span>' + (it.w ? '<span class="was">' + money(it.w) + '</span><span class="off">15% off</span>' : '') + '</p>' +
         it.o.map(function (g) { return groupHtml(g, it); }).join('') +
         '<div class="sh__cta"><a class="btn btn--red btn--block btn--lg" href="' + esc(it.u) + '" target="_blank" rel="noopener">Order on 14thstreetpizza.com</a><p>Opens the official ordering page for this item' + (it.c ? ' · ordered ' + num(it.c) + ' times' : '') + '.</p></div>';
       if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+      if (lenis) lenis.stop();
       document.body.style.overflow = 'hidden';
       body.scrollTop = 0; $('.sheet__inner').scrollTop = 0;
     }
     function close() {
       if (dlg.open) { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
     }
-    dlg.addEventListener('close', function () { document.body.style.overflow = ''; if (lastFocus) lastFocus.focus(); });
+    dlg.addEventListener('close', function () { if (lenis) lenis.start(); document.body.style.overflow = ''; if (lastFocus) lastFocus.focus(); });
     dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
     $('[data-sheet-close]').addEventListener('click', close);
     document.addEventListener('click', function (e) {
@@ -604,8 +731,9 @@
           '<ul class="branch__facts"><li>Delivery <b>' + range(s.fee, feeFmt) + '</b></li><li>Min. order <b>' + range(s.min, minFmt) + '</b></li><li>Up to <b>' + range(s.eta, function (v) { return v; }) + ' min</b></li><li><b>' + (b.zones || (s.fee || []).length) + '</b> areas</li>' + (hrs ? '<li>Open <b>' + esc(hrs) + '</b></li>' : '') + '</ul>' +
           '<div class="branch__links"><a href="' + esc(b.map) + '" target="_blank" rel="noopener">Directions</a>' + (phone ? '<a href="tel:' + phone.replace(/\s/g, '') + '">' + (b.phone ? 'Call ' : 'Call centre ') + esc(phone) + '</a>' : '') + '<a href="https://www.14thstreetpizza.com/" target="_blank" rel="noopener">Order online</a></div></li>';
       }).join('');
+      elList.scrollLeft = 0;
       if (hasGsap && !reduce) gsap.from(elList.children, { x: 24, opacity: 0, duration: .5, ease: 'expo.out', stagger: .05 });
-      if (flashId) { var el = $('[data-bid="' + flashId + '"]', elList); if (el) el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' }); }
+      if (flashId) { var el = $('[data-bid="' + flashId + '"]', elList); if (el) { var railed = elList.scrollWidth > elList.clientWidth + 4; if (railed) elList.scrollTo({ left: el.offsetLeft - 16, behavior: reduce ? 'auto' : 'smooth' }); else el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' }); } }
     };
     elCities.addEventListener('click', function (e) { var b = e.target.closest('.city'); if (b) showCity(b.dataset.city); });
     elCities.addEventListener('keydown', function (e) {
@@ -628,7 +756,7 @@
     var lab = { Karachi: [14, 5, 'start'], Bahawalpur: [-14, 5, 'end'], Multan: [-14, 5, 'end'], Khanewal: [6, 24, 'start'], Sahiwal: [14, -2, 'start'], Faisalabad: [-14, 5, 'end'], Islamabad: [14, 5, 'start'] };
     var zoneCity = {}; BRANCHES.forEach(function (b) { zoneCity[b.name] = b.city; });
     var zlist = ZONES.filter(function (z) { return z[6] && z[7]; });
-    var zd = zlist.map(function (z) { return '<circle class="map__zone" data-city="' + esc(z[0]) + '" r="1.3" cx="' + px(z[7]).toFixed(2) + '" cy="' + py(z[6]).toFixed(2) + '"></circle>'; }).join('');
+    var zd = zlist.map(function (z) { return '<path class="map__zone" data-city="' + esc(z[0]) + '" vector-effect="non-scaling-stroke" d="M' + px(z[7]).toFixed(3) + ' ' + py(z[6]).toFixed(3) + 'h0"></path>'; }).join('');
     var cen = {}; cities.forEach(function (c) { var x = 0; byCity[c].forEach(function (b) { x += b.lng; }); cen[c] = x / byCity[c].length; });
     var brs = BRANCHES.map(function (b) {
       var left = b.lng < cen[b.city] - 1e-6;
@@ -648,8 +776,8 @@
     var vb = { x: 0, y: 0, w: W, h: H }, zoomed = null, zoomTween = null;
     function apply() {
       map.setAttribute('viewBox', vb.x.toFixed(3) + ' ' + vb.y.toFixed(3) + ' ' + vb.w.toFixed(3) + ' ' + vb.h.toFixed(3));
-      var k = vb.w / W, zr = k * (1.3 + 2.4 * (1 - k));
-      zoneEls.forEach(function (z) { z.setAttribute('r', zr.toFixed(4)); });
+      var k = vb.w / W;
+      map.style.setProperty('--zone', (2.6 + 3.6 * (1 - k)).toFixed(2) + 'px');
       cityEls.forEach(function (c) { c.setAttribute('transform', 'translate(' + c.dataset.x + ' ' + c.dataset.y + ') scale(' + k.toFixed(4) + ')'); });
       brEls.forEach(function (b) { b.setAttribute('transform', 'translate(' + b.dataset.x + ' ' + b.dataset.y + ') scale(' + k.toFixed(4) + ')'); });
     }
@@ -743,6 +871,9 @@
     });
     lst.addEventListener('mousedown', function (e) { var li = e.target.closest('li'); if (li) { e.preventDefault(); choose(+li.dataset.z); } });
     input.addEventListener('blur', function () { setTimeout(close, 120); });
+    input.addEventListener('focus', function () {
+      if (window.matchMedia('(max-width: 960px)').matches) setTimeout(function () { scrollToY(input.getBoundingClientRect().top + window.scrollY - 90); }, 250);
+    });
   }
 
   /* ---------- generic reveals ---------- */
@@ -765,8 +896,200 @@
   }
 
   /* ---------- boot ---------- */
+  /* ---------- 3D tilt with glare (mouse only) ---------- */
+  function tilt() {
+    if (!finePointer || reduce || !hasGsap) return;
+    var sel = '.ticket, .crusts .opt, .branch, .xd__size, .store, .flavours__info';
+    var cur = null;
+    function reset(el) { gsap.to(el, { rotationX: 0, rotationY: 0, z: 0, duration: .6, ease: 'power3.out' }); }
+    document.addEventListener('pointermove', function (e) {
+      var el = e.target.closest ? e.target.closest(sel) : null;
+      if (cur && cur !== el) { reset(cur); cur = null; }
+      if (!el) return;
+      if (!el.classList.contains('tilt')) {
+        el.classList.add('tilt');
+        if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+        var g = document.createElement('span'); g.className = 'tilt__glare'; g.setAttribute('aria-hidden', 'true'); el.appendChild(g);
+      }
+      cur = el;
+      var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      var amt = el.classList.contains('flavours__info') ? 4 : 9;
+      gsap.to(el, { rotationY: (x - .5) * amt, rotationX: (.5 - y) * amt, z: 10, transformPerspective: 900, duration: .45, ease: 'power2.out', overwrite: 'auto' });
+      el.style.setProperty('--gx', (x * 100).toFixed(1) + '%'); el.style.setProperty('--gy', (y * 100).toFixed(1) + '%');
+    }, { passive: true });
+    document.addEventListener('pointerleave', function () { if (cur) { reset(cur); cur = null; } });
+  }
+
+  /* ---------- chat: answers only from the real menu, deals, branches and delivery areas ---------- */
+  function chat() {
+    var fab = $('[data-chat-open]'), box = $('#chat'), log = $('[data-chat-log]'), form = $('[data-chat-form]'), input = $('[data-chat-input]'), chipsEl = $('[data-chat-chips]');
+    if (!fab || !box) return;
+    var items = allItems();
+    var STOP = { the: 1, a: 1, an: 1, of: 1, and: 1, or: 1, to: 1, in: 1, on: 1, for: 1, is: 1, me: 1, my: 1, you: 1, do: 1, does: 1, what: 1, whats: 1, how: 1, much: 1, price: 1, prices: 1, cost: 1, rs: 1, pizza: 1, pizzas: 1, please: 1, plz: 1, can: 1, i: 1, get: 1, want: 1, have: 1, any: 1, there: 1, your: 1, with: 1, at: 1, near: 1, deliver: 1, delivery: 1, area: 1, e: 1, block: 1, sector: 1, phase: 1, no: 1, ka: 1, ki: 1, ke: 1, hai: 1, kya: 1, bhai: 1, bro: 1 };
+    function norm(t) { return String(t).toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+    function toks(t) { return norm(t).split(' ').filter(Boolean); }
+    function has(q, words) { return words.some(function (w) { return new RegExp('\\b' + w).test(q); }); }
+    var CITIES = ['karachi', 'islamabad', 'multan', 'faisalabad', 'bahawalpur', 'khanewal', 'sahiwal'];
+    var cityPhone = { Karachi: '021 111 363 636', Multan: '061 111 363 636', Bahawalpur: '062 111 363 636' };
+    function cap(c) { return c.charAt(0).toUpperCase() + c.slice(1); }
+    function cleanB(n) { return n.replace(/\s*[-–]\s*(Karachi|Islamabad|Multan|Faisalabad)\s*$/i, '').replace(/^[-–\s]+/, '').trim(); }
+    var zoneIdx = ZONES.map(function (z, i) {
+      var t = toks(z[1]); return { i: i, all: t, key: t.filter(function (w) { return !STOP[w]; }), nums: t.filter(function (w) { return /\d/.test(w); }) };
+    });
+    function findZones(q) {
+      var Q = {}; toks(q).forEach(function (w) { Q[w] = 1; });
+      var best = [], bestScore = 0;
+      zoneIdx.forEach(function (z) {
+        if (!z.key.length) return;
+        if (!z.nums.every(function (n) { return Q[n]; })) return;
+        var hit = z.key.filter(function (w) { return Q[w]; }).length;
+        if (!hit || !z.key.some(function (w) { return Q[w] && !/^\d+$/.test(w); })) return;
+        var sc = hit / z.key.length + (z.nums.length ? .2 : 0);
+        if (sc > bestScore + 1e-9) { bestScore = sc; best = [z.i]; } else if (Math.abs(sc - bestScore) < 1e-9) best.push(z.i);
+      });
+      return bestScore >= .6 ? best : [];
+    }
+    var itemIdx = items.map(function (x) { return { x: x, key: toks(x.it.n).filter(function (w) { return !STOP[w] && w.length > 1; }) }; });
+    function findItems(q) {
+      var Q = toks(q).filter(function (w) { return !STOP[w] && w.length > 2; });
+      if (!Q.length) return [];
+      var scored = itemIdx.map(function (o) {
+        var hit = o.key.filter(function (w) { return Q.some(function (qw) { return w === qw || (qw.length > 3 && w.indexOf(qw) === 0) || (w.length > 3 && qw.indexOf(w) === 0); }); }).length;
+        return { o: o, sc: o.key.length ? hit / o.key.length : 0, hit: hit };
+      }).filter(function (r) { return r.hit; });
+      if (!scored.length) return [];
+      var top = Math.max.apply(null, scored.map(function (r) { return r.sc; }));
+      return scored.filter(function (r) { return r.sc >= Math.max(.5, top - 1e-9) || r.hit >= 1 && top < .5 && r.sc === top; }).map(function (r) { return r.o.x; });
+    }
+    function itemCard(x) {
+      var it = x.it, sizes = '';
+      var g = group(it, /size/i);
+      if (g) {
+        var rows = g.ch.filter(function (c) { return !/stuffed/i.test(c[0]) && (/hand-tossed|xtreme|^\d+ inch \((slice|medium|large|x-large|full|small)\)$/i.test(c[0]) || !c[2]); }).slice(0, 6);
+        if (rows.length > 1) sizes = '<ul>' + rows.map(function (c) { return '<li><span>' + esc(sizeLabel(c[0]).replace(/ (hand-tossed|xtreme|pan|thinza)$/i, '')) + '</span><span>' + money(c[1] || it.p) + '</span></li>'; }).join('') + '</ul>';
+      }
+      return '<b>' + esc(it.n) + '</b> · ' + (it.f ? 'from ' : '') + money(it.p) + (it.w ? ' <s>' + money(it.w) + '</s>' : '') +
+        (it.d ? '<br>' + esc(it.d.length > 140 ? it.d.slice(0, 137) + '…' : it.d) : '') + sizes +
+        '<br><button class="msg__btn" type="button" data-open="' + esc(x.sec.name) + '|' + esc(it.s) + '">See all options</button> <a class="msg__btn" href="' + esc(it.u) + '" target="_blank" rel="noopener">Order</a>';
+    }
+    function list(xs) { return '<ul>' + xs.map(function (x) { return '<li><span>' + esc(x.it.n) + '</span><span>' + (x.it.f ? 'from ' : '') + money(x.it.p) + '</span></li>'; }).join('') + '</ul>'; }
+    function secItems(name) { return items.filter(function (x) { return x.sec.name === name; }); }
+    function dealsNow() {
+      var now = pkNow(), night = now.h >= 23 || now.h < 6, out = secItems('Pizza To Go').concat(secItems('Value Deals'));
+      var extra = [];
+      if (now.day === 'Tue') extra = extra.concat(secItems('Tuesday Twist'));
+      if (now.day === 'Sun') extra = extra.concat(secItems('Super Sunday'));
+      if (night) extra = extra.concat(secItems('EARLY MIDNIGHT Deals'));
+      var head = night ? 'Early Midnight deals are live right now (11 PM – 6 AM).' : 'Early Midnight deals start at 11 PM.';
+      return '<b>On right now</b> (Pakistan time):' + list(extra.concat(out)) + '<br>' + head + ' Tuesday Twist runs on Tuesdays, Super Sunday on Sundays.<br><a class="msg__btn" href="#deals">See the deals board</a>';
+    }
+    function zoneAnswer(zs) {
+      var z = ZONES[zs[0]];
+      if (zs.length > 1) {
+        var uniq = []; zs.forEach(function (k) { var a = ZONES[k][1] + ', ' + ZONES[k][0]; if (uniq.indexOf(a) < 0) uniq.push(a); });
+        if (uniq.length > 1) return 'I found a few matches. Which one is yours?<ul>' + uniq.slice(0, 5).map(function (a) { return '<li><span>' + esc(a) + '</span><span></span></li>'; }).join('') + '</ul>Type the full name and I’ll check it.';
+      }
+      return '<b>Yes, we deliver to ' + esc(z[1]) + ', ' + esc(z[0]) + '.</b><ul><li><span>From</span><span>' + esc(cleanB(z[2])) + '</span></li><li><span>Delivery fee</span><span>' + (z[3] ? 'Rs. ' + num(z[3]) : 'Free') + '</span></li><li><span>Minimum order</span><span>' + (z[4] ? 'Rs. ' + num(z[4]) : 'None') + '</span></li><li><span>Delivery time</span><span>up to ' + z[5] + ' min</span></li></ul><a class="msg__btn" href="https://www.14thstreetpizza.com/" target="_blank" rel="noopener">Order now</a>';
+    }
+    function cityAnswer(c) {
+      var C = cap(c), bs = BRANCHES.filter(function (b) { return b.city === C; });
+      return '<b>' + bs.length + (bs.length > 1 ? ' branches' : ' branch') + ' in ' + C + ':</b><ul>' + bs.map(function (b) { return '<li><span>' + esc(cleanB(b.name)) + '<br><small>' + esc(b.street || '') + '</small></span><span><a href="' + esc(b.map) + '" target="_blank" rel="noopener">Map</a></span></li>'; }).join('') + '</ul>' + (cityPhone[C] ? 'Call ' + cityPhone[C] + '.' : 'Order online for delivery.');
+    }
+    function answer(raw) {
+      var q = norm(raw);
+      var city = CITIES.filter(function (c) { return q.indexOf(c) > -1; })[0];
+      if (!q) return '';
+      if (/^(hi|hello|hey|salam|assalam|aoa|asalam|slm)\b/.test(q)) return 'Hi! Ask me about the menu, prices, deals, or whether we deliver to your area.';
+      if (has(q, ['thank', 'shukriya', 'thx'])) return 'Anytime. Enjoy your pizza!';
+      if (has(q, ['franchis'])) return 'You can apply for a 14th Street franchise through the official form.<br><a class="msg__btn" href="https://www.14thstreetpizza.com/franchise" target="_blank" rel="noopener">Franchise form</a>';
+      if (has(q, ['pay', 'card', 'cash', 'cod', 'meezan', 'online payment'])) return 'You can pay <b>cash on delivery</b>, or <b>by card online</b> through Meezan Bank.';
+      if (has(q, ['app', 'android', 'iphone', 'ios', 'play store', 'playstore', 'apple'])) return 'The 14th Street app is on both stores.<br><a class="msg__btn" href="https://play.google.com/store/apps/details?id=com.fourteenstreetpizzaco.fourteenstreetpizzaco" target="_blank" rel="noopener">Google Play</a> <a class="msg__btn" href="https://apps.apple.com/us/app/14th-street-pizza-co/id1319278882" target="_blank" rel="noopener">App Store</a>';
+      if (has(q, ['phone', 'call', 'number', 'contact', 'email', 'whatsapp', 'helpline', 'complain', 'feedback'])) return '<ul><li><span>Karachi</span><span>021 111 363 636</span></li><li><span>Multan</span><span>061 111 363 636</span></li><li><span>Bahawalpur</span><span>062 111 363 636</span></li></ul>Email callcentre@14thstreetpizza.com or info@14thstreetpizza.com. A WhatsApp number isn’t listed on the official site.<br><a class="msg__btn" href="https://www.14thstreetpizza.com/feedback" target="_blank" rel="noopener">Feedback form</a>';
+      if (has(q, ['hour', 'open', 'timing', 'close', 'closing', 'kab tak'])) return 'Hours differ by branch. Karachi (North Nazimabad) is open <b>12 PM – 3 AM</b> daily, Multan Cantt <b>12 PM – 1:45 AM</b>. Early Midnight deals run <b>11 PM – 6 AM</b>.';
+      var zs = findZones(raw);
+      if (has(q, ['deliver', 'delivery', 'area', 'reach']) || (zs.length && !findItems(raw).length)) {
+        if (zs.length) return zoneAnswer(zs);
+        if (city) return 'Tell me your area in ' + cap(city) + ' (for example a block or society name) and I’ll check the fee, minimum order and time.';
+        return 'Type your area name, for example “DHA Phase 6”, “F-10” or “Gulgasht Colony”, and I’ll check if we deliver there.';
+      }
+      if (has(q, ['midnight', 'late night', 'night'])) return '<b>Early Midnight deals</b>, 11 PM – 6 AM:' + list(secItems('EARLY MIDNIGHT Deals'));
+      if (has(q, ['tuesday'])) return '<b>Tuesday Twist</b> (Tuesdays only):' + list(secItems('Tuesday Twist'));
+      if (has(q, ['sunday'])) return '<b>Super Sunday</b> (Sundays only):' + list(secItems('Super Sunday'));
+      if (has(q, ['deal', 'offer', 'discount', 'sale', 'promo', 'combo', 'sasta', 'cheap'])) return dealsNow();
+      var other = ['lahore', 'rawalpindi', 'pindi', 'peshawar', 'quetta', 'hyderabad', 'sialkot', 'gujranwala', 'sukkur', 'abbottabad'].filter(function (c) { return q.indexOf(c) > -1; })[0];
+      if (other && !city) return 'There’s no 14th Street branch listed in ' + cap(other) + ' yet. Branches are in Karachi, Islamabad, Multan, Faisalabad, Bahawalpur, Khanewal and Sahiwal. To bring one there, see the <a href="https://www.14thstreetpizza.com/franchise" target="_blank" rel="noopener">franchise form</a>.';
+      if (city || has(q, ['branch', 'location', 'address', 'outlet', 'where', 'near'])) {
+        if (city) return cityAnswer(city);
+        return 'We have <b>16 branches in 7 cities</b>: Karachi (5), Islamabad (3), Multan (3), Faisalabad (2), Bahawalpur, Khanewal and Sahiwal. Which city are you in?';
+      }
+      if (has(q, ['veg', 'vegetarian'])) { var vg = items.filter(function (x) { return x.it.n === 'Vegetarian'; })[0]; return (vg ? itemCard(vg) + '<br><br>' : '') + 'You can also build your own on any crust and pick <b>Vegetarian</b> as the flavour.'; }
+      if (has(q, ['spicy', 'hot', 'fiery', 'teekha', 'tikha'])) return 'For heat, try these:' + list(items.filter(function (x) { return /spicy|fiery|peri|hot|flaming|jalapeno|buffalo/i.test(x.it.n + ' ' + x.it.d) && x.sec.name !== 'Dips'; }).slice(0, 8));
+      if (has(q, ['size', 'inch', 'biggest', 'largest', 'small', 'large'])) return 'Hand-tossed comes as a 20″ slice, 9″, 12″, 15″ and a full 20″. Pan comes in 6″, 9″ and 12″, Thinza in 9″ and 12″, and Xtreme in 6″, 9″ and 12″.<br><a class="msg__btn" href="#build">See them to scale</a>';
+      if (has(q, ['xtreme', 'extreme', 'double decker', 'doubledecker'])) {
+        var xi = findItems(raw).filter(function (x) { return x.sec.name === 'Xtreme Pizza'; });
+        if (xi.length === 1) return itemCard(xi[0]);
+        return '<b>Xtreme</b> is the double-decker pizza:' + list(secItems('Xtreme Pizza')) + 'Each comes in 6″, 9″ and 12″.';
+      }
+      var sec = MENU.filter(function (m) { return q.indexOf(norm(m.name).replace(/ deals?$/, '')) > -1 && norm(m.name).length > 3; })[0];
+      var found = findItems(raw);
+      if (found.length === 1) return itemCard(found[0]);
+      if (found.length > 1 && found.length <= 9) return 'Here’s what matches:' + list(found) + '<br>Ask about one of them for sizes and the order link.';
+      if (sec) return '<b>' + esc(sec.name.replace('EARLY MIDNIGHT', 'Early Midnight')) + '</b>:' + list(secItems(sec.name).slice(0, 12));
+      if (has(q, ['menu', 'food', 'eat', 'khana'])) return 'The menu has deals, 11 signature flavours, Xtreme, build-your-own, wraps, pasta, a snack box, sides, salad, desserts, dips and drinks.<br><a class="msg__btn" href="#menu">Open the full menu</a>';
+      return 'I can answer questions about prices, deals, delivery areas, branches, hours and payment. Try one of the buttons below, or call the Karachi call centre on 021 111 363 636.';
+    }
+    var CHIPS = ['Deals on now', 'Xtreme prices', 'Do you deliver to me?', 'Midnight deals', 'Branches in Karachi', 'Payment options'];
+    chipsEl.innerHTML = CHIPS.map(function (c) { return '<button type="button">' + c + '</button>'; }).join('');
+    function add(html, who) {
+      var m = document.createElement('div'); m.className = 'msg msg--' + who; m.innerHTML = html; log.appendChild(m);
+      if (hasGsap && !reduce) gsap.from(m, { y: 12, opacity: 0, duration: .35, ease: 'expo.out' });
+      log.scrollTop = log.scrollHeight; return m;
+    }
+    function ask(text) {
+      text = String(text).trim(); if (!text) return;
+      add(esc(text), 'me');
+      var t = add('<i></i><i></i><i></i>', 'bot'); t.classList.add('msg--typing');
+      setTimeout(function () { t.remove(); add(answer(text), 'bot'); }, 420 + Math.min(500, text.length * 8));
+    }
+    var greeted = false;
+    function open(v) {
+      box.hidden = !v; fab.setAttribute('aria-expanded', v);
+      if (v) {
+        if (!greeted) { greeted = true; add('Hi! I’m the 14th Street helper. Ask me about prices, today’s deals, or whether we deliver to your area.', 'bot'); }
+        if (hasGsap && !reduce) gsap.fromTo(box, { opacity: 0, y: 24, scale: .96 }, { opacity: 1, y: 0, scale: 1, duration: .4, ease: 'back.out(1.5)' });
+        if (finePointer) input.focus({ preventScroll: true });
+      } else fab.focus({ preventScroll: true });
+    }
+    fab.addEventListener('click', function () { open(true); });
+    $('[data-chat-close]').addEventListener('click', function () { open(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden && !document.querySelector('dialog[open]')) open(false); });
+    chipsEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) ask(b.textContent); });
+    form.addEventListener('submit', function (e) { e.preventDefault(); ask(input.value); input.value = ''; });
+    log.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href^="#"]'); if (a && window.matchMedia('(max-width: 640px)').matches) open(false);
+    });
+    // the button appears once the hero is behind you
+    function topCheck() { fab.classList.toggle('is-top', window.scrollY < window.innerHeight * .6); }
+    window.addEventListener('scroll', topCheck, { passive: true }); topCheck();
+    // keep the button out of the way of the sticky build receipt on phones
+    var build = $('#build');
+    if (build && 'IntersectionObserver' in window) new IntersectionObserver(function (es) {
+      fab.classList.toggle('is-away', es[0].isIntersecting && window.matchMedia('(max-width: 960px)').matches);
+    }, { rootMargin: '-20% 0px -20% 0px' }).observe(build);
+  }
+
+  function smooth() {
+    if (!hasGsap) return;
+    ScrollTrigger.config({ ignoreMobileResize: true });
+    if (reduce || !finePointer || !window.Lenis) return;
+    lenis = new window.Lenis({ duration: 1.15, easing: function (t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); }, smoothWheel: true });
+    lenis.on('scroll', ScrollTrigger.update);
+    gsap.ticker.add(function (t) { lenis.raf(t * 1000); });
+    gsap.ticker.lagSmoothing(0);
+  }
   function boot() {
-    ticker(); nav(); best(); xtreme(); flavours(); build(); deals(); menu(); sheet(); branches(); hero(); reveals();
+    smooth();
+    ticker(); nav(); best(); xtreme(); flavours(); build(); deals(); menu(); sheet(); branches(); hero(); reveals(); tilt(); chat();
     intro().then(heroIn);
     if (hasGsap) window.addEventListener('load', function () { ScrollTrigger.refresh(); });
   }
