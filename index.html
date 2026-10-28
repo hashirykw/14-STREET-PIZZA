@@ -213,7 +213,7 @@
           <label class="toggle" data-stuffed-wrap>
             <input type="checkbox" data-stuffed>
             <span class="toggle__ui" aria-hidden="true"></span>
-            <span>Stuffed crust</span>
+            <span class="toggle__txt"><b>Stuffed crust</b><small data-stuffed-note>Cheese-filled edge</small></span>
           </label>
         </fieldset>
         <fieldset class="field">
@@ -232,11 +232,14 @@
 
       <div class="build__visual">
         <div class="ladder" data-ladder aria-hidden="true">
+          <div class="ladder__spin" data-ladder-spin>
+            <img class="ladder__pizza" data-ladder-pizza src="assets/img/food/create-your-own-pizza/hand-tossed.webp" width="759" height="489" alt="">
+          </div>
           <svg viewBox="-110 -110 220 220" class="ladder__svg">
             <g data-rings></g>
           </svg>
-          <img class="ladder__pizza" data-ladder-pizza src="assets/img/food/create-your-own-pizza/hand-tossed.webp" width="820" height="820" alt="">
         </div>
+        <p class="ladder__cap" data-ladder-cap aria-live="polite"></p>
         <div class="receipt" aria-live="polite">
           <p class="receipt__title">Your build</p>
           <ul class="receipt__lines" data-receipt></ul>

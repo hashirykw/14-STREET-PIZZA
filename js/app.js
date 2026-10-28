@@ -95,7 +95,7 @@
       var tl = gsap.timeline();
       tl.from(box, { y: -120, opacity: 0, rotationZ: -40, duration: .75, ease: 'back.out(1.6)' })
         .from('.loader__line, .loader__bar', { y: 16, opacity: 0, duration: .5, ease: 'expo.out', stagger: .06 }, '-=.4')
-        .to(lid, { rotationX: -122, duration: .95, ease: 'power3.inOut' }, '+=.05')
+        .to(lid, { rotationX: 98, duration: .95, ease: 'power3.inOut' }, '+=.05')
         .fromTo(pizza, { rotation: -60, scale: .9 }, { rotation: 40, scale: 1, duration: 1.4, ease: 'power2.out' }, '<')
         .fromTo('.steam', { opacity: 0, y: 0 }, { opacity: .8, y: -40, duration: .9, ease: 'sine.out', stagger: .18 }, '-=.9')
         .to('.steam', { opacity: 0, duration: .5 }, '-=.2');
@@ -373,7 +373,7 @@
     };
     var crustNote = { 'Hand-tossed': 'New York style', 'Pan Crust': 'Chicago style', 'Thinza': 'Crispy thin', 'Footlong': 'Cheesy edges' };
     var vegImg = function (v) { return 'assets/img/options/select-your-veggies-' + v.toLowerCase().replace(/s$/, 's').replace(/\s+/g, '-') + '.webp'; };
-    var st = { crust: 0, size: 0, stuffed: false, flavour: 0, sauce: 0, veg: [] };
+    var st = { crust: 0, size: -1, stuffed: false, flavour: 0, sauce: 0, veg: [] };
     var elC = $('[data-crusts]'), elS = $('[data-sizes]'), elStuff = $('[data-stuffed]'), elStuffWrap = $('[data-stuffed-wrap]');
     var elF = $('[data-flavour]'), elSa = $('[data-sauces]'), elV = $('[data-veg]');
     var rings = $('[data-rings]'), lp = $('[data-ladder-pizza]'), rec = $('[data-receipt]'), tot = $('[data-total]'), go = $('[data-build-order]');
@@ -381,15 +381,30 @@
     elC.innerHTML = sec.items.map(function (it, i) {
       return '<button class="opt" type="button" aria-pressed="' + (i === 0) + '" data-i="' + i + '"><img src="' + crustImg[it.n] + '" alt="" loading="lazy"><b>' + esc(it.n.replace(' Crust', '')) + '</b><small>' + (crustNote[it.n] || '') + '</small></button>';
     }).join('');
-    // ring guides: 6 9 12 15 20
-    var inches = [20, 15, 12, 9, 6];
-    rings.innerHTML = inches.map(function (d) {
-      var r = d * 5, a = -Math.PI / 4, x = (r * Math.cos(a)).toFixed(1), y = (r * Math.sin(a)).toFixed(1);
-      return '<circle class="ring" data-d="' + d + '" r="' + r + '"></circle>';
-    }).join('') + inches.map(function (d) {
-      var r = d * 5, a = -Math.PI / 4 + (d === 6 ? -0.3 : 0), x = (r * Math.cos(a)).toFixed(1), y = (r * Math.sin(a)).toFixed(1);
-      return '<g class="ring-tag" transform="translate(' + x + ' ' + y + ')"><rect class="ring-pill" x="-9" y="-6" width="18" height="11" rx="2"></rect><text class="ring-label" data-d="' + d + '" x="0" y="3" text-anchor="middle">' + d + '″</text></g>';
-    }).join('');
+    // Size guide, drawn to scale and only for the sizes this crust really comes in.
+    // The biggest size always fills the ladder (200 of 220 units), the rest are in proportion.
+    var spin = $('[data-ladder-spin]'), capEl = $('[data-ladder-cap]');
+    var PPI = 10, ringKey = '', COVER = .955; // COVER = how much of each photo's width is pizza (the rest is padding)
+    var CM = { 6: 15, 9: 23, 12: 30, 15: 38, 20: 51 };
+    function ringSizes(sz) {
+      var out = [];
+      sz.forEach(function (s) { var m = /(\d+)\s*Inch/i.exec(s.n); if (m && out.indexOf(+m[1]) < 0) out.push(+m[1]); });
+      return out.sort(function (a, b) { return a - b; });
+    }
+    function drawRings(ds) {
+      var key = ds.join(',');
+      if (!ds.length || key === ringKey) return;
+      ringKey = key;
+      PPI = 200 / Math.max.apply(null, ds);
+      rings.innerHTML = ds.map(function (d) {
+        return '<circle class="ring" data-d="' + d + '" r="' + (d * PPI / 2).toFixed(2) + '"></circle>';
+      }).join('') + ds.map(function (d) {
+        var r = d * PPI / 2, x = 0, y = (-r).toFixed(1); // labels stack on the top of the rings like rungs of a ladder
+        return '<g class="ring-tag" data-d="' + d + '" transform="translate(' + x + ' ' + y + ')"><rect class="ring-pill" x="-12" y="-7.5" width="24" height="14" rx="3"></rect><text class="ring-label" x="0" y="3.4" text-anchor="middle">' + d + '″</text></g>';
+      }).join('');
+      if (hasGsap && !reduce) gsap.from($$('.ring', rings), { scale: .6, opacity: 0, transformOrigin: '50% 50%', duration: .7, ease: 'expo.out', stagger: .06, clearProps: 'transform,opacity' });
+    }
+    function defaultSize(sz) { for (var i = 0; i < sz.length; i++) if (/medium/i.test(sz[i].n)) return i; return 0; }
 
     function sizesOf(it) {
       var g = group(it, /size/i); if (!g) return [];
@@ -412,10 +427,13 @@
       var it = sec.items[st.crust];
       $$('.opt', elC).forEach(function (b, i) { b.setAttribute('aria-pressed', i === st.crust); });
       var sz = sizesOf(it);
-      if (st.size >= sz.length) st.size = 0;
+      if (st.size < 0 || st.size >= sz.length) st.size = defaultSize(sz);
       elS.innerHTML = sz.map(function (s, i) {
         var m = /(\d+)\s*Inch\s*\(([^)]+)\)/.exec(s.n);
-        return '<button class="size" type="button" role="radio" aria-checked="' + (i === st.size) + '" data-i="' + i + '"><b>' + (m ? m[1] + '″' : esc(s.n)) + '</b><span>' + (m ? esc(m[2]) : '') + ' · ' + plain(s.p) + '</span></button>';
+        var slice = !!(m && /slice/i.test(m[2]));
+        var head = slice ? 'Slice' : m ? m[1] + '″' : esc(s.n);
+        var sub = slice ? m[1] + '″ pie' : m ? esc(m[2]) : '';
+        return '<button class="size" type="button" role="radio" aria-checked="' + (i === st.size) + '" data-i="' + i + '"><b>' + head + '</b><span>' + sub + ' · ' + plain(s.p) + '</span></button>';
       }).join('');
       elS.setAttribute('role', 'radiogroup'); elS.setAttribute('aria-label', 'Size');
       var cur = sz[st.size];
@@ -424,6 +442,9 @@
       if (!canStuff) st.stuffed = false;
       elStuff.checked = st.stuffed;
       elStuffWrap.title = canStuff ? '' : 'Stuffed crust is available on hand-tossed only';
+      var note = $('[data-stuffed-note]');
+      if (note) note.textContent = canStuff ? 'Cheese-filled edge · +' + plain(cur.sp - cur.p) : 'Hand-tossed crust only';
+      drawRings(ringSizes(sz));
       chips(elF, group(it, /flavour/i), st.flavour, false);
       chips(elSa, group(it, /sauce/i), st.sauce, false);
       var vg = group(it, /veggies/i);
@@ -434,13 +455,16 @@
     }
     function renderVisual(it, cur) {
       var m = cur ? /(\d+)\s*Inch\s*\(([^)]+)\)/.exec(cur.n) : null;
-      var d = m ? +m[1] : 12, isSlice = m && /slice/i.test(m[2]);
-      $$('.ring, .ring-label', rings).forEach(function (r) { r.classList.toggle('is-on', +r.dataset.d === d); });
-      var src = it.img, foot = it.n === 'Footlong';
+      var d = m ? +m[1] : 12, isSlice = !!(m && /slice/i.test(m[2])), foot = it.n === 'Footlong';
+      $$('.ring, .ring-tag', rings).forEach(function (r) { r.classList.toggle('is-on', +r.dataset.d === d); });
+      var src = it.img;
       if (lp.getAttribute('src') !== src) lp.src = src;
-      lp.style.setProperty('--s', (d * 10 / 220 * (foot ? 1.25 : 1.03)).toFixed(3));
-      lp.style.clipPath = foot ? 'none' : '';
-      lp.classList.toggle('is-slice', !!isSlice);
+      // pizza width = ring diameter, corrected for the transparent padding inside each photo
+      lp.style.setProperty('--s', (d * PPI / 220 / COVER).toFixed(4));
+      lp.classList.toggle('is-slice', isSlice);
+      if (capEl) capEl.innerHTML = isSlice
+        ? 'One slice from a <b>20″</b> pie · about 51 cm across'
+        : '<b>' + d + '″</b>' + (foot ? ' footlong' : (m ? ' ' + esc(m[2].toLowerCase()) : '')) + (CM[d] ? ' · about ' + CM[d] + ' cm ' + (foot ? 'long' : 'across') : '');
       var fl = group(it, /flavour/i), sa = group(it, /sauce/i), vg = group(it, /veggies/i);
       var price = cur ? (st.stuffed && cur.sp ? cur.sp : cur.p) : it.p;
       var lines = [
@@ -457,9 +481,10 @@
     }
     elC.addEventListener('click', function (e) {
       var b = e.target.closest('.opt'); if (!b) return;
-      st.crust = +b.dataset.i; st.size = 0; st.stuffed = false; st.veg = []; st.flavour = 0; st.sauce = 0;
+      st.crust = +b.dataset.i; st.size = -1; st.stuffed = false; st.veg = []; st.flavour = 0; st.sauce = 0;
       renderAll();
-      if (hasGsap && !reduce) gsap.fromTo(lp, { rotation: -90, opacity: 0 }, { rotation: 0, opacity: 1, duration: .8, ease: 'expo.out' });
+      // animate the wrapper, never the image: GSAP would overwrite the CSS scale that sizes the pizza
+      if (hasGsap && !reduce) gsap.fromTo(spin, { y: -34, opacity: 0, rotation: -8 }, { y: 0, opacity: 1, rotation: 0, duration: .8, ease: 'back.out(1.5)', clearProps: 'transform,opacity' });
     });
     elS.addEventListener('click', function (e) { var b = e.target.closest('.size'); if (!b) return; st.size = +b.dataset.i; renderAll(); });
     elStuff.addEventListener('change', function () { st.stuffed = elStuff.checked; renderAll(); });
@@ -742,9 +767,9 @@
     });
 
     // map: real lat/lng; zooms from the whole country into a city's delivery-area constellation
-    var W = 400, H = 460, minLng = 66.4, maxLng = 74.2, minLat = 24.2, maxLat = 34.4;
+    var W = 400, H = 460, minLng = 66.2, maxLng = 75.4, minLat = 24.2, maxLat = 34.4; // wide east margin so labels never clip
     function px(lng) { return 30 + (lng - minLng) / (maxLng - minLng) * (W - 60); }
-    function py(lat) { return 20 + (maxLat - lat) / (maxLat - minLat) * (H - 40); }
+    function py(lat) { return 26 + (maxLat - lat) / (maxLat - minLat) * (H - 128); } // bottom ~100 units stay clear for the caption bar
     var pts = cities.map(function (c) {
       var bs = byCity[c], lat = 0, lng = 0; bs.forEach(function (b) { lat += b.lat; lng += b.lng; });
       return { c: c, x: px(lng / bs.length), y: py(lat / bs.length), n: bs.length };
@@ -789,7 +814,7 @@
       var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
       var w = Math.max(x1 - x0, 4) * 2.1, h = Math.max(y1 - y0, 4) * 1.4;
       if (w / h > W / H) h = w * H / W; else w = h * W / H;
-      return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w: w, h: h };
+      return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h * .43, w: w, h: h }; // centre in the space above the caption bar
     }
     function zoomTo(c, animate) {
       zoomed = c;
