@@ -63,7 +63,7 @@
   }
 
   /* ---------- preloader: the box opens ---------- */
-  function intro() {
+  function intro(onReveal) {
     var el = $('[data-loader]');
     if (!el) return Promise.resolve();
     if (!hasGsap || reduce) { el.classList.add('is-done'); return Promise.resolve(); }
@@ -71,6 +71,7 @@
     document.body.style.overflow = 'hidden';
     var pctEl = $('[data-pct]', el), bar = $('[data-bar]', el), msg = $('[data-loader-msg]', el);
     var lid = $('[data-lid]', el), box = $('[data-box]', el), pizza = $('.box__pizza', el);
+    var shade = $('[data-lid-shade]', el), shadow = $('[data-box-shadow]', el);
     var prog = { v: 0 }, loaded = document.readyState === 'complete';
     window.addEventListener('load', function () { loaded = true; });
     function paint() {
@@ -86,24 +87,51 @@
           el.classList.add('is-done'); document.body.style.overflow = ''; if (lenis) lenis.start(); res();
         } })
           .to(prog, { v: 100, duration: .35, ease: 'power1.out', onUpdate: paint })
-          .to(pizza, { scale: 1.12, duration: .3, ease: 'power2.out' }, '<')
-          .to('.loader__stage', { scale: 1.25, opacity: 0, duration: .55, ease: 'power3.in' }, '+=.12')
-          .to('.loader__half--top', { yPercent: -101, duration: .8, ease: 'expo.inOut' }, '-=.22')
-          .to('.loader__half--bottom', { yPercent: 101, duration: .8, ease: 'expo.inOut' }, '<');
+          .to('.loader__line, .loader__bar', { opacity: 0, y: 10, duration: .3, ease: 'power2.in' }, '+=.1')
+          // dive into the pizza, then the cloth splits to reveal the page
+          .to(box, { scale: 2.4, y: '-8%', duration: .75, ease: 'power3.in' }, '<')
+          .to(pizza, { scale: 1.08, duration: .75, ease: 'power3.in' }, '<')
+          .to('.loader__stage', { opacity: 0, duration: .3, ease: 'power1.in' }, '-=.28')
+          .addLabel('split', '-=.25')
+          .call(function () { if (idle) idle.kill(); if (onReveal) onReveal(); }, null, 'split')
+          .to('.loader__half--top', { yPercent: -101, duration: .8, ease: 'expo.inOut' }, 'split')
+          .to('.loader__half--bottom', { yPercent: 101, duration: .8, ease: 'expo.inOut' }, 'split');
       }
-      gsap.set(lid, { z: 30, transformOrigin: '50% 0%' });
+      var idle = null;
+      gsap.set(lid, { rotationX: 0, transformOrigin: '50% 0%' });
       var tl = gsap.timeline();
-      tl.from(box, { y: -120, opacity: 0, rotationZ: -40, duration: .75, ease: 'back.out(1.6)' })
-        .from('.loader__line, .loader__bar', { y: 16, opacity: 0, duration: .5, ease: 'expo.out', stagger: .06 }, '-=.4')
-        .to(lid, { rotationX: 98, duration: .95, ease: 'power3.inOut' }, '+=.05')
-        .fromTo(pizza, { rotation: -60, scale: .9 }, { rotation: 40, scale: 1, duration: 1.4, ease: 'power2.out' }, '<')
-        .fromTo('.steam', { opacity: 0, y: 0 }, { opacity: .8, y: -40, duration: .9, ease: 'sine.out', stagger: .18 }, '-=.9')
-        .to('.steam', { opacity: 0, duration: .5 }, '-=.2');
-      gsap.to(prog, { v: 82, duration: 1.7, ease: 'power1.out', onUpdate: paint });
+      // 1. the box lands on the cloth
+      tl.fromTo(box, { y: '-70%', opacity: 0, rotation: -10 }, { y: '0%', opacity: 1, rotation: 0, duration: .7, ease: 'bounce.out' })
+        .fromTo(shadow, { scale: .35, opacity: 0 }, { scale: 1, opacity: 1, duration: .7, ease: 'bounce.out' }, '<')
+        .from('.loader__line, .loader__bar', { y: 16, opacity: 0, duration: .5, ease: 'expo.out', stagger: .06 }, '-=.35')
+        // 2. heat pops the lid twice, then it swings open past upright and settles back
+        .to(lid, { rotationX: 16, duration: .13, ease: 'power2.out' }, '-=.2')
+        .to(lid, { rotationX: 0, duration: .16, ease: 'bounce.out' })
+        .to(box, { rotation: -1.5, duration: .06, yoyo: true, repeat: 3, ease: 'sine.inOut' }, '<')
+        .to(lid, { rotationX: 11, duration: .11, ease: 'power2.out' }, '+=.04')
+        .to(lid, { rotationX: 0, duration: .14, ease: 'bounce.out' })
+        .to(lid, { rotationX: 108, duration: .85, ease: 'power3.out' }, '+=.04')
+        .to(lid, { rotationX: 100, duration: .45, ease: 'sine.inOut' })
+        // 3. light falls on the inside of the lid as it opens
+        .fromTo(shade, { opacity: 1 }, { opacity: .12, duration: .8, ease: 'power2.out' }, '<-.85')
+        .fromTo(pizza, { rotation: -20, scale: .94 }, { rotation: 10, scale: 1, duration: 1.4, ease: 'power2.out' }, '<')
+        // 4. steam
+        .fromTo('.steam i', { opacity: 0, y: 0, scaleX: .7 }, { opacity: .85, y: -46, scaleX: 1.1, duration: .9, ease: 'sine.out', stagger: .14 }, '<.15')
+        .to('.steam i', { opacity: 0, duration: .5, stagger: .1 }, '-=.35');
+      // reveal once the page has loaded AND the lid is open, so the box never cuts off mid-swing
+      var opened = false;
+      tl.eventCallback('onComplete', function () {
+        opened = true;
+        // keep the steam rising while the rest of the page finishes loading
+        idle = gsap.timeline({ repeat: -1 })
+          .fromTo('.steam i', { opacity: 0, y: 0, scaleX: .7 }, { opacity: .7, y: -46, scaleX: 1.1, duration: .9, ease: 'sine.out', stagger: .22 })
+          .to('.steam i', { opacity: 0, duration: .5, stagger: .22 }, '-=.5');
+      });
+      gsap.to(prog, { v: 86, duration: tl.duration(), ease: 'power1.out', onUpdate: paint });
       var minT = setTimeout(function check() {
-        if (loaded) finish(); else setTimeout(check, 120);
-      }, 1900);
-      setTimeout(finish, 4500); // never hold the page hostage
+        if (loaded && opened) finish(); else minT = setTimeout(check, 100);
+      }, 600);
+      setTimeout(finish, 6000); // never hold the page hostage
       el.addEventListener('click', function () { clearTimeout(minT); finish(); });
     });
   }
@@ -199,9 +227,10 @@
     gsap.to('.float--1, .float--3', { yPercent: -60, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
     gsap.to('.float--2, .float--4', { yPercent: -120, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
   }
+  // built paused at boot so the hero is already hidden behind the loader, then played as the cloth splits
   function heroIn() {
-    if (!hasGsap || reduce) return;
-    var tl = gsap.timeline({ defaults: { ease: 'expo.out' } });
+    if (!hasGsap || reduce) return null;
+    var tl = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } });
     tl.from('.hero__sign', { y: -40, rotation: -14, opacity: 0, duration: .8, ease: 'back.out(2)' })
       .from('.hero__line > span', { yPercent: 110, duration: 1, stagger: .1 }, '-=.6')
       .from('.hero__lede, .hero__cta, .hero__facts', { y: 26, opacity: 0, duration: .8, stagger: .08 }, '-=.7')
@@ -209,6 +238,7 @@
       .from('.hero__plate', { scale: .3, rotation: -140, opacity: 0, duration: 1.3 }, .1)
       .from('.float', { scale: 0, opacity: 0, duration: .8, stagger: .07, ease: 'back.out(2)' }, .5)
       .from('.hero__note', { scale: .6, opacity: 0, rotation: -20, duration: .7, ease: 'back.out(2.4)' }, .9);
+    return tl;
   }
 
   /* ---------- best sellers ---------- */
@@ -1115,7 +1145,8 @@
   function boot() {
     smooth();
     ticker(); nav(); best(); xtreme(); flavours(); build(); deals(); menu(); sheet(); branches(); hero(); reveals(); tilt(); chat();
-    intro().then(heroIn);
+    var heroTl = heroIn();
+    intro(function () { if (heroTl) heroTl.play(); }).then(function () { if (heroTl && !heroTl.isActive() && heroTl.progress() === 0) heroTl.play(); });
     if (hasGsap) window.addEventListener('load', function () { ScrollTrigger.refresh(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

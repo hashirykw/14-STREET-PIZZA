@@ -6,9 +6,25 @@
 <title>14th Street Pizza Co. — Xtreme double-deckers, 16 branches, 7 cities</title>
 <meta name="description" content="14th Street Pizza Co.: Xtreme double-decker pizzas, 11 signature flavours, 5 crusts and midnight deals till 6 AM. 16 branches in Karachi, Islamabad, Multan, Faisalabad, Bahawalpur, Khanewal and Sahiwal.">
 <meta name="theme-color" content="#FAC515">
-<meta property="og:title" content="14th Street Pizza Co.">
-<meta property="og:description" content="Xtreme double-decker pizzas, signature flavours and midnight deals. 16 branches, 7 cities.">
-<meta property="og:image" content="assets/promos/promo-square-1.webp">
+<link rel="canonical" href="https://14-street-pizza.vercel.app/">
+<!-- Link preview (WhatsApp, Facebook, Instagram DMs, LinkedIn, X, Slack). Image URLs must be absolute. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="14th Street Pizza Co.">
+<meta property="og:url" content="https://14-street-pizza.vercel.app/">
+<meta property="og:title" content="14th Street Pizza Co. — Dare to go Xtreme">
+<meta property="og:description" content="Xtreme double-decker pizzas, 11 signature flavours and midnight deals till 6 AM. 16 branches, 7 cities. Order online.">
+<meta property="og:image" content="https://14-street-pizza.vercel.app/assets/og/og-image.jpg">
+<meta property="og:image:secure_url" content="https://14-street-pizza.vercel.app/assets/og/og-image.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="14th Street Pizza Co. — Dare to go Xtreme. Xtreme Peri-Peri pizza on a checkered cloth, from Rs. 679.">
+<meta property="og:locale" content="en_PK">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="14th Street Pizza Co. — Dare to go Xtreme">
+<meta name="twitter:description" content="Xtreme double-decker pizzas, 11 signature flavours and midnight deals till 6 AM. 16 branches, 7 cities.">
+<meta name="twitter:image" content="https://14-street-pizza.vercel.app/assets/og/og-image.jpg">
+<link rel="apple-touch-icon" href="assets/brand/14th-street-pizza-logo.png">
 <link rel="icon" type="image/png" href="assets/brand/14th-street-pizza-logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,17 +43,39 @@
   <div class="loader__half loader__half--top"></div>
   <div class="loader__half loader__half--bottom"></div>
   <div class="loader__stage">
-    <div class="box" data-box>
-      <div class="box__base">
-        <span class="box__side box__side--front"></span>
-        <span class="box__side box__side--right"></span>
-        <div class="box__tray"><img class="box__pizza" src="assets/mid/food/xtreme-pizza/xtreme-peri-peri.webp" alt="" width="520" height="520"></div>
+    <div class="box-drop" data-box>
+      <span class="box-shadow" data-box-shadow></span>
+      <div class="box">
+        <!-- floor + four walls -->
+        <div class="box__floor">
+          <img class="box__pizza" src="assets/mid/food/xtreme-pizza/xtreme-peri-peri.webp" alt="" width="520" height="520">
+        </div>
+        <span class="box__wall box__wall--back"></span>
+        <span class="box__wall box__wall--left"></span>
+        <span class="box__wall box__wall--right"></span>
+        <span class="box__wall box__wall--front"></span>
+        <!-- lid: hinged on the back edge, sits on top of the walls -->
+        <div class="box__hinge">
+          <div class="box__lid" data-lid>
+            <div class="box__lid-top">
+              <span class="box__lid-band"></span>
+              <img src="assets/brand/14th-street-pizza-logo.webp" alt="" width="500" height="270">
+              <span class="box__lid-sticker">Hot &amp; fresh</span>
+            </div>
+            <div class="box__lid-inside">
+              <span class="box__lid-print">
+                <img src="assets/brand/14th-street-pizza-logo.webp" alt="" width="500" height="270">
+                <b>Dare to go Xtreme</b>
+              </span>
+              <span class="box__lid-shade" data-lid-shade></span>
+            </div>
+            <span class="box__lip box__lip--front"></span>
+            <span class="box__lip box__lip--left"></span>
+            <span class="box__lip box__lip--right"></span>
+          </div>
+        </div>
+        <span class="steam steam--1"><i></i></span><span class="steam steam--2"><i></i></span><span class="steam steam--3"><i></i></span>
       </div>
-      <div class="box__lid" data-lid>
-        <div class="box__lid-face box__lid-face--out"><img src="assets/brand/14th-street-pizza-logo.webp" alt="" width="500" height="270"></div>
-        <div class="box__lid-face box__lid-face--in"></div>
-      </div>
-      <span class="steam steam--1"></span><span class="steam steam--2"></span><span class="steam steam--3"></span>
     </div>
     <p class="loader__line"><span data-loader-msg>Firing up the oven</span><b><span data-pct>0</span>%</b></p>
     <div class="loader__bar"><span data-bar></span></div>
